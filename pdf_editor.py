@@ -15,6 +15,25 @@ class PDFApp(tk.Tk):
         self.title("PDF Tools")
         self.geometry("900x600")
 
+        # Initialize ttk style
+        style = ttk.Style()
+        
+        # Use 'clam' theme for better customization
+        style.theme_use('clam')
+
+        # Define a new style for light blue buttons
+        style.configure('LightBlue.TButton',
+                        background='#d0e8f1',  # Light blue background
+                        foreground='black',    # Default text color
+                        borderwidth=1,
+                        focusthickness=3,
+                        focuscolor='none')
+
+        # Define the hover (active) background color
+        style.map('LightBlue.TButton',
+                  background=[('active', '#87CEFA')],  # Slightly darker light blue on hover
+                  foreground=[('active', 'black')])
+
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(expand=True, fill='both')
 
@@ -26,6 +45,7 @@ class PDFApp(tk.Tk):
         self.notebook.add(self.portrait_tab, text='Portrait Mode')
         self.notebook.add(self.landscape_tab, text='Landscape Mode')
 
+
 class PDFEditorTab(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
@@ -33,13 +53,13 @@ class PDFEditorTab(ttk.Frame):
         self.additional_pages = []
         self.pages_to_keep = []
 
-        # Create widgets
-        ttk.Button(self, text="Open PDF", command=self.open_pdf).pack(pady=5)
+        # Create widgets with the new LightBlue.TButton style
+        ttk.Button(self, text="Open PDF", style='LightBlue.TButton', command=self.open_pdf).pack(pady=5)
         self.pages_list = tk.Listbox(self, selectmode=tk.MULTIPLE)
         self.pages_list.pack(fill=tk.BOTH, expand=True, pady=5)
-        ttk.Button(self, text="Add Pages from Other PDFs", command=self.add_pages).pack(pady=5)
-        ttk.Button(self, text="Delete Selected Pages", command=self.delete_pages).pack(pady=5)
-        ttk.Button(self, text="Save PDF", command=self.save_pdf).pack(pady=5)
+        ttk.Button(self, text="Add Pages from Other PDFs", style='LightBlue.TButton', command=self.add_pages).pack(pady=5)
+        ttk.Button(self, text="Delete Selected Pages", style='LightBlue.TButton', command=self.delete_pages).pack(pady=5)
+        ttk.Button(self, text="Save PDF", style='LightBlue.TButton', command=self.save_pdf).pack(pady=5)
 
     def open_pdf(self):
         file_path = filedialog.askopenfilename(title="Select PDF file", filetypes=[("PDF Files", "*.pdf")])
@@ -65,7 +85,8 @@ class PDFEditorTab(ttk.Frame):
             messagebox.showinfo("Info", "Please select one or more pages to delete.")
             return
 
-        for page_idx in selected_pages:
+        # Delete in reverse order to prevent index shifting
+        for page_idx in reversed(selected_pages):
             self.pages_list.delete(page_idx)
             self.pages_list.insert(page_idx, f"Original Page {page_idx + 1} - Deleted")
 
@@ -114,6 +135,7 @@ class PDFEditorTab(ttk.Frame):
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save the file: {e}")
 
+
 class PortraitModeTab(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
@@ -161,9 +183,10 @@ class PortraitModeTab(ttk.Frame):
         self.underline = tk.BooleanVar()
         ttk.Checkbutton(controls_frame, text="Underline", variable=self.underline, command=self.update_canvas_text).pack(pady=2)
 
-        ttk.Button(controls_frame, text="Update Position", command=self.update_position).pack(pady=2)
-        ttk.Button(controls_frame, text="45 Degrees", command=lambda: self.process_text_overlay(angle=45)).pack(pady=2)
-        ttk.Button(controls_frame, text="Horizontal", command=self.process_text_overlay).pack(pady=2)
+        # Apply the LightBlue.TButton style to these buttons
+        ttk.Button(controls_frame, text="Update Position", style='LightBlue.TButton', command=self.update_position).pack(pady=2)
+        ttk.Button(controls_frame, text="45 Degrees", style='LightBlue.TButton', command=lambda: self.process_text_overlay(angle=45)).pack(pady=2)
+        ttk.Button(controls_frame, text="Horizontal", style='LightBlue.TButton', command=self.process_text_overlay).pack(pady=2)
 
         self.final_x_pos = None
         self.final_y_pos = None
@@ -298,94 +321,63 @@ class PortraitModeTab(ttk.Frame):
 
         c.save()
 
+
 class LandscapeModeTab(PortraitModeTab):
-  def __init__(self, parent):
-      super().__init__(parent)
+    def __init__(self, parent):
+        super().__init__(parent)
 
-  def init_ui(self):
-      self.scale_factor = 0.4
-      self.canvas_width = int(792 * self.scale_factor)
-      self.canvas_height = int(612 * self.scale_factor)
-      
-      main_frame = ttk.Frame(self)
-      main_frame.pack(expand=True, fill='both')
+    def init_ui(self):
+        self.scale_factor = 0.4
+        self.canvas_width = int(792 * self.scale_factor)
+        self.canvas_height = int(612 * self.scale_factor)
+        
+        main_frame = ttk.Frame(self)
+        main_frame.pack(expand=True, fill='both')
 
-      self.canvas = tk.Canvas(main_frame, width=self.canvas_width, height=self.canvas_height, bg='white')
-      self.canvas.pack(side='left', padx=10, pady=10)
+        self.canvas = tk.Canvas(main_frame, width=self.canvas_width, height=self.canvas_height, bg='white')
+        self.canvas.pack(side='left', padx=10, pady=10)
 
-      controls_frame = ttk.Frame(main_frame)
-      controls_frame.pack(side='left', fill='y', padx=10, pady=10)
+        controls_frame = ttk.Frame(main_frame)
+        controls_frame.pack(side='left', fill='y', padx=10, pady=10)
 
-      self.text_id = self.canvas.create_text(
-          self.canvas_width // 2, self.canvas_height // 2, text="Sample Text",
-          font=("Helvetica-Bold", int(20 * self.scale_factor)), fill="red"
-      )
+        self.text_id = self.canvas.create_text(
+            self.canvas_width // 2, self.canvas_height // 2, text="Sample Text",
+            font=("Helvetica-Bold", int(20 * self.scale_factor)), fill="red"
+        )
 
-      self.canvas.tag_bind(self.text_id, "<Button1-Motion>", self.drag_text)
+        self.canvas.tag_bind(self.text_id, "<Button1-Motion>", self.drag_text)
 
-      ttk.Label(controls_frame, text="Enter text for the stamp:").pack(pady=2)
-      self.text_entry = ttk.Entry(controls_frame, width=30)
-      self.text_entry.pack(pady=2)
-      self.text_entry.bind('<KeyRelease>', self.update_canvas_text)
+        ttk.Label(controls_frame, text="Enter text for the stamp:").pack(pady=2)
+        self.text_entry = ttk.Entry(controls_frame, width=30)
+        self.text_entry.pack(pady=2)
+        self.text_entry.bind('<KeyRelease>', self.update_canvas_text)
 
-      ttk.Label(controls_frame, text="Enter font size:").pack(pady=2)
-      self.font_size_entry = ttk.Entry(controls_frame, width=10)
-      self.font_size_entry.pack(pady=2)
-      self.font_size_entry.bind('<KeyRelease>', self.update_canvas_text)
-      self.font_size_entry.insert(0, "20")
+        ttk.Label(controls_frame, text="Enter font size:").pack(pady=2)
+        self.font_size_entry = ttk.Entry(controls_frame, width=10)
+        self.font_size_entry.pack(pady=2)
+        self.font_size_entry.bind('<KeyRelease>', self.update_canvas_text)
+        self.font_size_entry.insert(0, "20")
 
-      ttk.Label(controls_frame, text="Select font color:").pack(pady=2)
-      self.font_color = tk.StringVar()
-      self.font_color.set('red')
-      color_options = ['black', 'blue', 'red']
-      self.color_menu = ttk.OptionMenu(controls_frame, self.font_color, *color_options, command=self.update_canvas_text)
-      self.color_menu.pack(pady=2)
+        ttk.Label(controls_frame, text="Select font color:").pack(pady=2)
+        self.font_color = tk.StringVar()
+        self.font_color.set('red')
+        color_options = ['black', 'blue', 'red']
+        self.color_menu = ttk.OptionMenu(controls_frame, self.font_color, *color_options, command=self.update_canvas_text)
+        self.color_menu.pack(pady=2)
 
-      self.underline = tk.BooleanVar()
-      ttk.Checkbutton(controls_frame, text="Underline", variable=self.underline, command=self.update_canvas_text).pack(pady=2)
+        self.underline = tk.BooleanVar()
+        ttk.Checkbutton(controls_frame, text="Underline", variable=self.underline, command=self.update_canvas_text).pack(pady=2)
 
-      ttk.Button(controls_frame, text="Update Position", command=self.update_position).pack(pady=2)
-      ttk.Button(controls_frame, text="45 Degrees", command=lambda: self.process_text_overlay(angle=45)).pack(pady=2)
-      ttk.Button(controls_frame, text="Horizontal", command=self.process_text_overlay).pack(pady=2)
+        # Apply the LightBlue.TButton style to these buttons
+        ttk.Button(controls_frame, text="Update Position", style='LightBlue.TButton', command=self.update_position).pack(pady=2)
+        ttk.Button(controls_frame, text="45 Degrees", style='LightBlue.TButton', command=lambda: self.process_text_overlay(angle=45)).pack(pady=2)
+        ttk.Button(controls_frame, text="Horizontal", style='LightBlue.TButton', command=self.process_text_overlay).pack(pady=2)
 
-      self.final_x_pos = None
-      self.final_y_pos = None
+        self.final_x_pos = None
+        self.final_y_pos = None
 
-  def process_text_overlay(self, angle=None):
-      text = self.text_entry.get()
-      font_size = self.font_size_entry.get()
-      selected_color = self.font_color.get()
-      underline = self.underline.get()
-
-      if not text:
-          messagebox.showerror("Input Error", "Please enter the text for the stamp.")
-          return
-
-      try:
-          font_size = int(font_size)
-      except ValueError:
-          messagebox.showerror("Input Error", "Please enter a valid font size.")
-          return
-
-      x_pos, y_pos = self.get_text_position()
-
-      base_pdf_path = filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
-      if not base_pdf_path:
-          return
-
-      output_pdf_path = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF files", "*.pdf")])
-      if not output_pdf_path:
-          return
-
-      self.add_text_to_existing_pdf(
-          base_pdf_path, text, output_pdf_path, font_size, x_pos, y_pos,
-          angle=angle, orientation='landscape', color=selected_color, underline=underline
-      )
-
-      messagebox.showinfo("Success", "PDF with text stamp saved successfully!")
 
 # Main application
 if __name__ == "__main__":
-  app = PDFApp()
-  app.mainloop()
-
+    app = PDFApp()
+    app.mainloop()
