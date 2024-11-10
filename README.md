@@ -10,4 +10,7 @@ Support for text stamping in both portrait and landscape orientations
 
 Save the edited PDFs with all changes applied, including added pages and stamps
 
+Drag & drop to organise pages in desired order
+
 Simple and user-friendly interface for PDF manipulation
+
