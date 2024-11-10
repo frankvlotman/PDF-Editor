@@ -1,6 +1,6 @@
 import os
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, simpledialog
 from tkinter import ttk
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib.pagesizes import letter, landscape
@@ -13,7 +13,7 @@ class PDFApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("PDF Tools")
-        self.geometry("900x600")
+        self.geometry("1000x700")  # Increased width for better layout with new buttons
 
         # Initialize ttk style
         style = ttk.Style()
@@ -50,22 +50,60 @@ class PDFEditorTab(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
         self.reader = None
-        self.additional_pages = []
-        self.pages_to_keep = []
+        self.pages_to_keep = []  # List of original page indices to keep
+        self.additional_pages = []  # List of added pages from other PDFs
+        self.current_pages = []  # Unified list to manage ordering
+        self.style = ttk.Style()
+        self.style.configure("Treeview", rowheight=25)
 
         # Create widgets with the new LightBlue.TButton style
-        ttk.Button(self, text="Open PDF", style='LightBlue.TButton', command=self.open_pdf).pack(pady=5)
-        self.pages_list = tk.Listbox(self, selectmode=tk.MULTIPLE)
-        self.pages_list.pack(fill=tk.BOTH, expand=True, pady=5)
-        ttk.Button(self, text="Add Pages from Other PDFs", style='LightBlue.TButton', command=self.add_pages).pack(pady=5)
-        ttk.Button(self, text="Delete Selected Pages", style='LightBlue.TButton', command=self.delete_pages).pack(pady=5)
-        ttk.Button(self, text="Save PDF", style='LightBlue.TButton', command=self.save_pdf).pack(pady=5)
+        button_frame = ttk.Frame(self)
+        button_frame.pack(pady=5)
+
+        ttk.Button(button_frame, text="Open PDF", style='LightBlue.TButton', command=self.open_pdf).grid(row=0, column=0, padx=5, pady=5)
+        ttk.Button(button_frame, text="Merge PDFs", style='LightBlue.TButton', command=self.merge_pdfs).grid(row=0, column=1, padx=5, pady=5)
+        ttk.Button(button_frame, text="Split PDF", style='LightBlue.TButton', command=self.split_pdf).grid(row=0, column=2, padx=5, pady=5)
+
+        # Instructional Label
+        instruction_label = ttk.Label(self, text="Click on a page to drag and drop to edit the order of pages.", font=("Helvetica", 10, "italic"))
+        instruction_label.pack(pady=(10, 0))  # Add some padding above the label
+
+        # Create a frame to hold the Listbox and Scrollbar
+        self.pages_frame = ttk.Frame(self)
+        self.pages_frame.pack(fill=tk.BOTH, expand=True, pady=5, padx=10)
+
+        # Create the Listbox
+        self.pages_list = tk.Listbox(self.pages_frame, selectmode=tk.MULTIPLE)
+        self.pages_list.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Enable drag-and-drop
+        self.pages_list.bind('<Button-1>', self.on_click)
+        self.pages_list.bind('<B1-Motion>', self.on_drag)
+        self.drag_data = {"item": None}
+
+        # Create the Scrollbar
+        self.scrollbar = ttk.Scrollbar(self.pages_frame, orient=tk.VERTICAL, command=self.pages_list.yview)
+        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Configure the Listbox to use the Scrollbar
+        self.pages_list.config(yscrollcommand=self.scrollbar.set)
+
+        # Buttons for page operations
+        operation_frame = ttk.Frame(self)
+        operation_frame.pack(pady=5)
+
+        ttk.Button(operation_frame, text="Add Pages from Other PDFs", style='LightBlue.TButton', command=self.add_pages).grid(row=0, column=0, padx=5, pady=5)
+        ttk.Button(operation_frame, text="Delete Selected Pages", style='LightBlue.TButton', command=self.delete_pages).grid(row=0, column=1, padx=5, pady=5)
+        ttk.Button(operation_frame, text="Extract Selected Pages", style='LightBlue.TButton', command=self.extract_pages).grid(row=0, column=2, padx=5, pady=5)
+        ttk.Button(operation_frame, text="Save PDF", style='LightBlue.TButton', command=self.save_pdf).grid(row=0, column=3, padx=5, pady=5)
 
     def open_pdf(self):
         file_path = filedialog.askopenfilename(title="Select PDF file", filetypes=[("PDF Files", "*.pdf")])
         if file_path:
             self.reader = PdfReader(file_path)
             self.pages_to_keep = list(range(len(self.reader.pages)))
+            self.additional_pages = []
+            self.current_pages = [{'type': 'original', 'page_num': i, 'page': self.reader.pages[i]} for i in self.pages_to_keep]
             self.load_pages()
 
     def load_pages(self):
@@ -74,8 +112,11 @@ class PDFEditorTab(ttk.Frame):
                 raise Exception("No PDF file is loaded.")
             
             self.pages_list.delete(0, tk.END)
-            for i in range(len(self.reader.pages)):
-                self.pages_list.insert(tk.END, f"Original Page {i+1}")
+            for page in self.current_pages:
+                if page['type'] == 'original':
+                    self.pages_list.insert(tk.END, f"Original Page {page['page_num'] +1}")
+                elif page['type'] == 'added':
+                    self.pages_list.insert(tk.END, f"Added Page from {page['source']} - Page {page['page_num']}")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load PDF: {e}")
 
@@ -85,29 +126,78 @@ class PDFEditorTab(ttk.Frame):
             messagebox.showinfo("Info", "Please select one or more pages to delete.")
             return
 
-        # Delete in reverse order to prevent index shifting
-        for page_idx in reversed(selected_pages):
-            self.pages_list.delete(page_idx)
-            self.pages_list.insert(page_idx, f"Original Page {page_idx + 1} - Deleted")
+        # Identify original pages to delete before modifying the listbox
+        original_selected = [
+            idx for idx in selected_pages
+            if self.current_pages[idx]['type'] == 'original'
+        ]
 
-        self.pages_to_keep = [i for i in self.pages_to_keep if i not in selected_pages]
+        if not original_selected:
+            messagebox.showinfo("Info", "Please select one or more original pages to delete.")
+            return
+
+        # Remove selected original pages from pages_to_keep and current_pages
+        pages_to_remove = sorted(original_selected, reverse=True)
+        for idx in pages_to_remove:
+            # Mark as deleted in the Listbox
+            entry = self.pages_list.get(idx)
+            self.pages_list.delete(idx)
+            self.pages_list.insert(idx, f"{entry} - Deleted")
+            # Remove from current_pages
+            self.current_pages.pop(idx)
+            self.pages_to_keep.pop(idx)
+
         messagebox.showinfo("Success", "Pages marked for deletion. Save the document to apply changes.")
 
     def add_pages(self):
         new_pdfs = filedialog.askopenfilenames(title="Select PDFs to add", filetypes=[("PDF Files", "*.pdf")])
         if new_pdfs:
             try:
-                self.additional_pages.clear()
-                self.pages_list.insert(tk.END, "Added Pages:")
                 for pdf_path in new_pdfs:
                     new_reader = PdfReader(pdf_path)
-                    self.additional_pages.extend(new_reader.pages)
                     for i in range(len(new_reader.pages)):
-                        self.pages_list.insert(tk.END, f"Added Page {i+1} from {os.path.basename(pdf_path)}")
-
-                messagebox.showinfo("Success", f"Pages from {len(new_pdfs)} PDF(s) will be added before saving.")
+                        page_info = {
+                            'type': 'added',
+                            'source': os.path.basename(pdf_path),
+                            'page_num': i + 1,
+                            'page': new_reader.pages[i]
+                        }
+                        self.additional_pages.append(page_info)
+                        self.current_pages.append(page_info)
+                        self.pages_list.insert(tk.END, f"Added Page from {os.path.basename(pdf_path)} - Page {i+1}")
+                messagebox.showinfo("Success", f"Pages from {len(new_pdfs)} PDF(s) added successfully.")
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to load additional PDFs: {e}")
+
+    def extract_pages(self):
+        selected_indices = self.pages_list.curselection()
+        if not selected_indices:
+            messagebox.showinfo("Info", "Please select one or more pages to extract.")
+            return
+
+        pages_to_extract = []
+        for idx in selected_indices:
+            page = self.current_pages[idx]['page']
+            pages_to_extract.append(page)
+
+        if not pages_to_extract:
+            messagebox.showinfo("Info", "No valid pages selected to extract.")
+            return
+
+        writer = PdfWriter()
+        for page in pages_to_extract:
+            writer.add_page(page)
+
+        output_filename = filedialog.asksaveasfilename(defaultextension=".pdf",
+                                                       filetypes=[("PDF Files", "*.pdf")],
+                                                       title="Save Extracted Pages As")
+        if output_filename:
+            try:
+                with open(output_filename, "wb") as output_file:
+                    writer.write(output_file)
+                messagebox.showinfo("Success", f"Extracted pages saved as '{output_filename}'.")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save the extracted pages: {e}")
 
     def save_pdf(self):
         try:
@@ -116,24 +206,132 @@ class PDFEditorTab(ttk.Frame):
             
             writer = PdfWriter()
 
-            for i in self.pages_to_keep:
-                writer.add_page(self.reader.pages[i])
+            # Add pages in the order of current_pages
+            for page_info in self.current_pages:
+                writer.add_page(page_info['page'])
 
-            if self.additional_pages:
-                for page in self.additional_pages:
-                    writer.add_page(page)
-
-            output_filename = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF Files", "*.pdf")])
+            output_filename = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF Files", "*.pdf")],
+                                                           title="Save PDF As")
             
             if output_filename:
                 with open(output_filename, "wb") as output_file:
                     writer.write(output_file)
 
                 messagebox.showinfo("Success", f"File saved as '{output_filename}' with the selected changes applied.")
-                self.pages_list.delete(0, tk.END)
-
+                self.load_pages()  # Reload pages to reflect any deletions
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save the file: {e}")
+
+    def merge_pdfs(self):
+        pdf_files = filedialog.askopenfilenames(title="Select PDFs to Merge", filetypes=[("PDF Files", "*.pdf")])
+        if pdf_files:
+            try:
+                merger = PdfWriter()
+                for pdf in pdf_files:
+                    reader = PdfReader(pdf)
+                    for page in reader.pages:
+                        merger.add_page(page)
+                output_filename = filedialog.asksaveasfilename(defaultextension=".pdf",
+                                                               filetypes=[("PDF Files", "*.pdf")],
+                                                               title="Save Merged PDF As")
+                if output_filename:
+                    with open(output_filename, "wb") as f:
+                        merger.write(f)
+                    messagebox.showinfo("Success", f"Merged PDF saved as '{output_filename}'.")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to merge PDFs: {e}")
+
+    def split_pdf(self):
+        if self.reader is None:
+            messagebox.showerror("Error", "No PDF file is loaded.")
+            return
+
+        page_ranges_str = simpledialog.askstring("Split PDF", "Enter page ranges to split (e.g., 1-3,5,7-9):")
+        if not page_ranges_str:
+            return
+
+        try:
+            ranges = self.parse_page_ranges(page_ranges_str)
+            for idx, (start, end) in enumerate(ranges, 1):
+                writer = PdfWriter()
+                for page_num in range(start-1, end):
+                    if page_num < len(self.reader.pages):
+                        writer.add_page(self.reader.pages[page_num])
+                    else:
+                        raise Exception(f"Page number {page_num +1} exceeds the total number of pages.")
+                output_filename = filedialog.asksaveasfilename(defaultextension=".pdf",
+                                                               filetypes=[("PDF Files", "*.pdf")],
+                                                               title=f"Save Split PDF {idx} As")
+                if output_filename:
+                    with open(output_filename, "wb") as f:
+                        writer.write(f)
+            messagebox.showinfo("Success", "PDF split successfully.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to split PDF: {e}")
+
+    def parse_page_ranges(self, ranges_str):
+        ranges = []
+        parts = ranges_str.split(',')
+        for part in parts:
+            if '-' in part:
+                start, end = part.split('-')
+                start, end = int(start.strip()), int(end.strip())
+                if start > end:
+                    raise ValueError(f"Invalid range: {part}")
+                ranges.append((start, end))
+            else:
+                num = int(part.strip())
+                ranges.append((num, num))
+        return ranges
+
+    def on_click(self, event):
+        # Record the index of the clicked item
+        self.drag_data["item"] = self.pages_list.nearest(event.y)
+
+    def on_drag(self, event):
+        # Get the index of the item where the mouse is dragged to
+        new_index = self.pages_list.nearest(event.y)
+        if new_index != self.drag_data["item"]:
+            # Get the text of the item to move
+            item_text = self.pages_list.get(self.drag_data["item"])
+            # Remove the item from its original position
+            self.pages_list.delete(self.drag_data["item"])
+            # Insert the item at the new position
+            self.pages_list.insert(new_index, item_text)
+            # Update drag_data to the new position
+            self.drag_data["item"] = new_index
+
+            # Reorder current_pages based on the new Listbox order
+            self.reorder_current_pages()
+
+    def reorder_current_pages(self):
+        # Reconstruct current_pages based on the current Listbox order
+        new_current_pages = []
+        for idx in range(self.pages_list.size()):
+            entry = self.pages_list.get(idx)
+            if entry.startswith("Original Page") and "Deleted" not in entry:
+                page_num = int(entry.split(" ")[2]) - 1
+                new_current_pages.append({'type': 'original', 'page_num': page_num, 'page': self.reader.pages[page_num]})
+            elif entry.startswith("Added Page"):
+                # Extract source and page_num
+                try:
+                    parts = entry.split(" ")
+                    source = parts[3]
+                    page_num = int(parts[5])
+                    # Find the corresponding added page
+                    for added_page in self.additional_pages:
+                        if added_page['source'] == source and added_page['page_num'] == page_num:
+                            new_current_pages.append(added_page)
+                            break
+                except (IndexError, ValueError):
+                    continue
+            elif "Deleted" in entry:
+                # Skip deleted pages
+                continue
+        self.current_pages = new_current_pages
+
+    # Optional: Implement drag-and-drop for rearranging additional pages as well
+    # This is handled in reorder_current_pages()
 
 
 class PortraitModeTab(ttk.Frame):
